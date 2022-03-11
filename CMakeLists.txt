@@ -14,7 +14,4 @@ add_library(OBSC MODULE
 target_include_directories(OBSC PRIVATE $ENV{OBS_DIR}/libobs $ENV{OBS_DIR}/UI/obs-frontend-api)
 
 target_link_libraries(OBSC
-      obs)
-
-target_link_libraries(OBSC
-      obs-frontend-api)
+      obs obs-frontend-api)

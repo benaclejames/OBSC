@@ -1,5 +1,7 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <stdio.h>
+#include <WS2tcpip.h>
 #include <WinSock2.h>
 
 #pragma comment(lib,"WS2_32")
@@ -10,33 +12,41 @@ WSADATA data;
 SOCKADDR_IN addr;
 SOCKET sock;
 
-// /recording  ,F  
-unsigned const char recordingAddr[16] = {0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x67, 0x00, 0x00, 0x2c, 0x46, 0x00, 0x00};
+int create_osc_bool_message(char* message, const char* address, bool value) {
+    int len = strlen(address)+1;
+    int paddedLen = len + 4 - len % 4;
+    memcpy(message, address, paddedLen);
 
-// /streaming  ,F  
-unsigned const char streamingAddr[16] = {0x2f, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x69, 0x6e, 0x67, 0x00, 0x00, 0x2c, 0x46, 0x00, 0x00};
+    message[paddedLen++] = ',';
+    message[paddedLen++] = value ? 'T' : 'F'; 
+    message[paddedLen++] = '\0';
+    message[paddedLen++] = '\0';
+
+    return paddedLen;
+}
 
 void frontend_cb(enum obs_frontend_event event, void *priv_data)
 {
-    if (event == OBS_FRONTEND_EVENT_RECORDING_STARTED)
+    char message[100];
+    int msgLen;
+    
+    switch (event)
     {
-        unsigned char sendData[16];
-        memcpy(sendData, recordingAddr, sizeof(sendData));
-        sendData[13] = 0x54;
-        sendto(sock, sendData, sizeof(sendData), 0, (struct sockaddr*) &addr, sizeof(addr));
-    }
-    else if (event == OBS_FRONTEND_EVENT_RECORDING_STOPPED)
-        sendto(sock, recordingAddr, sizeof(recordingAddr), 0, (struct sockaddr*) &addr, sizeof(addr));
+        case OBS_FRONTEND_EVENT_RECORDING_STARTED:
+        case OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+            msgLen = create_osc_bool_message(message, "/recording", event == OBS_FRONTEND_EVENT_RECORDING_STARTED);
+            break;
+        
+        case OBS_FRONTEND_EVENT_STREAMING_STARTED:
+        case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
+            msgLen = create_osc_bool_message(message, "/streaming", event == OBS_FRONTEND_EVENT_STREAMING_STARTED);
+            break;
 
-    if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED)
-    {
-        unsigned char sendData[16];
-        memcpy(sendData, streamingAddr, sizeof(sendData));
-        sendData[13] = 0x54;
-        sendto(sock, sendData, sizeof(sendData), 0, (struct sockaddr*) &addr, sizeof(addr));
+        default:
+            return;
     }
-    else if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED)
-        sendto(sock, streamingAddr, sizeof(streamingAddr), 0, (struct sockaddr*) &addr, sizeof(addr));
+
+    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
 }
 
 bool obs_module_load(void)
@@ -44,7 +54,7 @@ bool obs_module_load(void)
     WSAStartup(MAKEWORD(2,2), &data);
     
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    InetPton(AF_INET, "127.0.0.1", &addr.sin_addr.s_addr);
     addr.sin_port = htons(9000);
 
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
