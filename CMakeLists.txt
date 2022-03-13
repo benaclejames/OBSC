@@ -4,6 +4,7 @@ project(OBSC)
 
 set(OBSC_SOURCES
       obsc.c
+      stored.c
 )
 
 link_directories($ENV{OBS_DIR}/build/libobs/Debug $ENV{OBS_DIR}/build/UI/obs-frontend-api/Debug)
