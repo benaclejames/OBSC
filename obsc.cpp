@@ -1,9 +1,10 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <stdio.h>
+#include <thread>
 #include <WS2tcpip.h>
 #include <WinSock2.h>
-#include "stored.c"
+#include "stored.h"
 
 #pragma comment(lib,"WS2_32")
 
@@ -13,6 +14,7 @@ WSADATA data;
 SOCKADDR_IN addr;
 SOCKET sock;
 struct stored stored;
+std::thread* osc_thread;
 
 int create_osc_bool_message(char* message, const char* address, bool value) {
     int len = strlen(address)+1;
@@ -47,36 +49,54 @@ int create_osc_int_message(char* message, const char* address, int value) {
     return paddedLen;
 }
 
-void frontend_cb(enum obs_frontend_event event, struct stored *priv_data)
+void update_osc()
 {
     char message[100];
     int msgLen;
-    
+
+    msgLen = create_osc_bool_message(message, "/recording", stored.get_recording_active());
+    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+
+    msgLen = create_osc_bool_message(message, "/streaming", stored.get_streaming_active());
+    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+
+    msgLen = create_osc_int_message(message, "/replaybuffer", stored.get_replay_buffer_save_count());
+    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+}
+
+void frontend_cb(enum obs_frontend_event event, void *priv_data)
+{
     switch (event)
     {
         case OBS_FRONTEND_EVENT_RECORDING_STARTED:
         case OBS_FRONTEND_EVENT_RECORDING_STOPPED:
-            msgLen = create_osc_bool_message(message, "/recording", event == OBS_FRONTEND_EVENT_RECORDING_STARTED);
-            break;
-        
         case OBS_FRONTEND_EVENT_STREAMING_STARTED:
         case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
-            msgLen = create_osc_bool_message(message, "/streaming", event == OBS_FRONTEND_EVENT_STREAMING_STARTED);
+            update_osc();
             break;
 
         case OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED:
-            msgLen = create_osc_int_message(message, "/replaybuffer", priv_data->replay_buffer_save_count);
-            priv_data->replay_buffer_save_count++;
+            stored.increment_save_count();
+            update_osc();
             break;
 
-        default:
-            return;
+        case OBS_FRONTEND_EVENT_EXIT:
+            osc_thread->detach();
+            delete osc_thread;
+            break;
     }
-
-    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
 }
 
-bool obs_module_load(void)
+void periodic_update_loop()
+{
+    while (true)
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        update_osc();
+    }
+}
+
+bool obs_module_load()
 {
     WSAStartup(MAKEWORD(2,2), &data);
     
@@ -86,6 +106,9 @@ bool obs_module_load(void)
 
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     
-    obs_frontend_add_event_callback(frontend_cb, &stored);
+    obs_frontend_add_event_callback(frontend_cb, nullptr);
+
+    // Start the osc update loop on a separate thread
+    osc_thread = new std::thread(periodic_update_loop);
     return true;
 }
