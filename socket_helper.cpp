@@ -40,5 +40,5 @@ socket_helper::socket_helper(std::string ip, int inPort, int outPort)
     if(bind(inSock, (SOCKADDR*)&inAddr, sizeof(inAddr)))
         blog(LOG_ERROR, "[OBSC] Failed to bind in socket");
 
-    recvThread = new std::thread(recv_loop);
+    recvThread = new std::thread(&socket_helper::recv_loop, this);
 }

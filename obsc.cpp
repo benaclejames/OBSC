@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <thread>
 #include "stored.h"
-#include "build/socket_helper.h"
+#include "socket_helper.h"
+#include "osc_message.h"
 
 
 OBS_DECLARE_MODULE()
@@ -47,17 +48,14 @@ int create_osc_int_message(char* message, const char* address, int value) {
 
 void update_osc()
 {
-    char message[100];
-    int msgLen;
+    osc_message* currentMessage = new osc_bool_message((char*)"/recording", stored.get_recording_active());
+    sockets->send(currentMessage->message, currentMessage->writerIndex);
 
-    msgLen = create_osc_bool_message(message, "/recording", stored.get_recording_active());
-    sockets->send(message, msgLen);
+    currentMessage = new osc_bool_message((char*)"/streaming", stored.get_streaming_active());
+    sockets->send(currentMessage->message, currentMessage->writerIndex);
 
-    msgLen = create_osc_bool_message(message, "/streaming", stored.get_streaming_active());
-    sockets->send(message, msgLen);
-
-    msgLen = create_osc_int_message(message, "/replaybuffer", stored.get_replay_buffer_save_count());
-    sockets->send(message, msgLen);
+    currentMessage = new osc_int_message((char*)"/replaybuffer", stored.get_replay_buffer_save_count());
+    sockets->send(currentMessage->message, currentMessage->writerIndex);
 }
 
 void frontend_cb(enum obs_frontend_event event, void *priv_data)
