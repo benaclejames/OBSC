@@ -2,18 +2,14 @@
 #include <obs-frontend-api.h>
 #include <stdio.h>
 #include <thread>
-#include <WS2tcpip.h>
-#include <WinSock2.h>
 #include "stored.h"
+#include "build/socket_helper.h"
 
-#pragma comment(lib,"WS2_32")
 
 OBS_DECLARE_MODULE()
 
-WSADATA data;
-SOCKADDR_IN addr;
-SOCKET sock;
-struct stored stored;
+socket_helper* sockets;
+stored stored;
 std::thread* osc_thread;
 
 int create_osc_bool_message(char* message, const char* address, bool value) {
@@ -55,13 +51,13 @@ void update_osc()
     int msgLen;
 
     msgLen = create_osc_bool_message(message, "/recording", stored.get_recording_active());
-    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+    sockets->send(message, msgLen);
 
     msgLen = create_osc_bool_message(message, "/streaming", stored.get_streaming_active());
-    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+    sockets->send(message, msgLen);
 
     msgLen = create_osc_int_message(message, "/replaybuffer", stored.get_replay_buffer_save_count());
-    sendto(sock, message, msgLen, 0, (struct sockaddr*) &addr, sizeof(addr));
+    sockets->send(message, msgLen);
 }
 
 void frontend_cb(enum obs_frontend_event event, void *priv_data)
@@ -98,13 +94,7 @@ void periodic_update_loop()
 
 bool obs_module_load()
 {
-    WSAStartup(MAKEWORD(2,2), &data);
-    
-    addr.sin_family = AF_INET;
-    InetPton(AF_INET, "127.0.0.1", &addr.sin_addr.s_addr);
-    addr.sin_port = htons(9000);
-
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    sockets = new socket_helper("127.0.0.1", 9001, 9000);
     
     obs_frontend_add_event_callback(frontend_cb, nullptr);
 
