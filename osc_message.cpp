@@ -1,4 +1,5 @@
-﻿#include "osc_message.h"
+﻿#include <util/base.h>
+#include "osc_message.h"
 
 osc_message::osc_message(char* address, char type) : address(address), type(type)
 {
@@ -14,21 +15,21 @@ osc_message::osc_message(char* address, char type) : address(address), type(type
 
 osc_message::osc_message(char* data, int size)
 {
-    // Read the address string
-    int len = strlen(data)+1;
-    address = new char[len];
-    memcpy(address, data, len);
+    memcpy(message, data, size);
 
+    // Read the address string
+    int len = strlen(message)+1;
+    address = new char[len];
+    memcpy(address, message, len);
     // Offset the writerIndex by the address length quantized to 4 bytes
     writerIndex = quantize(len, 4);
-
     // Ensure the next 2 bytes are a comma and the type
-    if (data[writerIndex++] != ',') {
-        throw "Invalid OSC message";
+    if (message[writerIndex++] != ',') {
+        blog(LOG_ERROR, "[OBSC] Expected comma after address");
     }
 
-    type = data[writerIndex++];
-    writerIndex += 2;
+    type = message[writerIndex++];
+    writerIndex += 2; // Skip the two null bytes
 }
 
 osc_float_message::osc_float_message(char* address, float value): osc_message(address, 'f')
@@ -37,6 +38,13 @@ osc_float_message::osc_float_message(char* address, float value): osc_message(ad
     swap_endianness(bytes, sizeof value);
     memcpy(&message[writerIndex], bytes, sizeof value);
     writerIndex += sizeof value;
+}
+
+float osc_float_message::parse() {
+    float value;
+    memcpy(&value, &message[writerIndex], sizeof value);
+    swap_endianness((char*)&value, sizeof value);
+    return value;
 }
 
 osc_string_message::osc_string_message(char* address, char* value) : osc_message(address, 's')
@@ -53,4 +61,11 @@ osc_int_message::osc_int_message(char* address, int value) : osc_message(address
     swap_endianness(bytes, sizeof value);
     memcpy(&message[writerIndex], bytes, sizeof value);
     writerIndex += sizeof value;
+}
+
+int osc_int_message::parse() {
+    int value;
+    memcpy(&value, &message[writerIndex], sizeof value);
+    swap_endianness((char*)&value, sizeof value);
+    return value;
 }
