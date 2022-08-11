@@ -21,6 +21,8 @@ protected:
 
 public:
     osc_message(char* data, int size);
+    char* address;
+    char type;
     int writerIndex;
     char message[256];
 };

@@ -1,4 +1,5 @@
 ﻿#include "socket_helper.h"
+#include "osc_message.h"
 
 #include <util/base.h>
 
@@ -12,18 +13,16 @@ void socket_helper::recv_loop()
     struct sockaddr_in SenderAddr;
     int SenderAddrSize = sizeof (SenderAddr);
 
-    printf("Receiving datagrams on %s\n", "127.0.0.1");
+    blog(LOG_INFO,"Receiving datagrams");
     while (true)
     {
         bytes_received = recvfrom(inSock, serverBuf, serverBufLen, 0 /* no flags*/, (SOCKADDR *) & SenderAddr, &SenderAddrSize);
-        if (bytes_received == SOCKET_ERROR) {
-            printf("recvfrom failed with error %d\n", WSAGetLastError());
-        }
-        printf("recv bytes");
+        osc_message msg = osc_message(serverBuf, bytes_received);
+        onMsgRecv(msg);
     }
 }
 
-socket_helper::socket_helper(std::string ip, int inPort, int outPort)
+socket_helper::socket_helper(std::string ip, int inPort, int outPort, void(*onMsgRecv)(osc_message)) : onMsgRecv(onMsgRecv)
 {
     WSAStartup(MAKEWORD(2,2), &data);
     
@@ -37,8 +36,19 @@ socket_helper::socket_helper(std::string ip, int inPort, int outPort)
     inAddr.sin_port = htons(inPort);
     InetPton(AF_INET, ip.c_str(), &inAddr.sin_addr.s_addr);
 
+    inSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
     if(bind(inSock, (SOCKADDR*)&inAddr, sizeof(inAddr)))
         blog(LOG_ERROR, "[OBSC] Failed to bind in socket");
 
     recvThread = new std::thread(&socket_helper::recv_loop, this);
+}
+
+socket_helper::~socket_helper() {
+    recvThread->detach();
+    delete recvThread;
+
+    closesocket(inSock);
+    closesocket(outSock);
+    WSACleanup();
 }

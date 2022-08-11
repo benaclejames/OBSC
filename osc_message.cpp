@@ -1,6 +1,6 @@
 ﻿#include "osc_message.h"
 
-osc_message::osc_message(char* address, char type)
+osc_message::osc_message(char* address, char type) : address(address), type(type)
 {
     int len = strlen(address)+1;
     writerIndex = quantize(len, 4);
@@ -14,7 +14,21 @@ osc_message::osc_message(char* address, char type)
 
 osc_message::osc_message(char* data, int size)
 {
-    
+    // Read the address string
+    int len = strlen(data)+1;
+    address = new char[len];
+    memcpy(address, data, len);
+
+    // Offset the writerIndex by the address length quantized to 4 bytes
+    writerIndex = quantize(len, 4);
+
+    // Ensure the next 2 bytes are a comma and the type
+    if (data[writerIndex++] != ',') {
+        throw "Invalid OSC message";
+    }
+
+    type = data[writerIndex++];
+    writerIndex += 2;
 }
 
 osc_float_message::osc_float_message(char* address, float value): osc_message(address, 'f')

@@ -1,6 +1,5 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
-#include <stdio.h>
 #include <thread>
 #include "stored.h"
 #include "socket_helper.h"
@@ -11,40 +10,6 @@ OBS_DECLARE_MODULE()
 
 socket_helper* sockets;
 stored stored;
-std::thread* osc_thread;
-
-int create_osc_bool_message(char* message, const char* address, bool value) {
-    int len = strlen(address)+1;
-    int paddedLen = len + 4 - len % 4;
-    memcpy(message, address, paddedLen);
-
-    message[paddedLen++] = ',';
-    message[paddedLen++] = value ? 'T' : 'F'; 
-    message[paddedLen++] = '\0';
-    message[paddedLen++] = '\0';
-
-    return paddedLen;
-}
-
-int create_osc_int_message(char* message, const char* address, int value) {
-    int len = strlen(address)+1;
-    int paddedLen = len + 4 - len % 4;
-    memcpy(message, address, paddedLen);
-
-    message[paddedLen++] = ',';
-    message[paddedLen++] = 'i'; 
-    message[paddedLen++] = '\0';
-    message[paddedLen++] = '\0';
-
-    // Convert value from big endian to little endian and copy to message
-    char* valuePtr = (char*)&value;
-    message[paddedLen++] = valuePtr[3];
-    message[paddedLen++] = valuePtr[2];
-    message[paddedLen++] = valuePtr[1];
-    message[paddedLen++] = valuePtr[0];
-
-    return paddedLen;
-}
 
 void update_osc()
 {
@@ -75,28 +40,21 @@ void frontend_cb(enum obs_frontend_event event, void *priv_data)
             break;
 
         case OBS_FRONTEND_EVENT_EXIT:
-            osc_thread->detach();
-            delete osc_thread;
+            delete sockets;
             break;
     }
 }
 
-void periodic_update_loop()
-{
-    while (true)
-    {
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+void on_update_recv(osc_message message) {
+    if (strcmp(message.address, "/avatar/change") == 0)
         update_osc();
-    }
 }
 
 bool obs_module_load()
 {
-    sockets = new socket_helper("127.0.0.1", 9001, 9000);
+    sockets = new socket_helper("127.0.0.1", 9001, 9000, on_update_recv);
     
     obs_frontend_add_event_callback(frontend_cb, nullptr);
 
-    // Start the osc update loop on a separate thread
-    osc_thread = new std::thread(periodic_update_loop);
     return true;
 }
